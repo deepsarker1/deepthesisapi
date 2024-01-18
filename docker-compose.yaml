@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  db:
+    image: mariadb:10.9.4
+    container_name: "thesis-db"
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_PASSWORD=password
+      - MYSQL_USER=app
+      - MYSQL_DATABASE=thesis_api
+
+  rabbit:
+    image: rabbitmq:3-management-alpine
+    container_name: 'thesis-rabbitmq'
+    ports:
+      - 5672:5672
+      - 15672:15672
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:15672']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: "thesis_api"
+    volumes:
+      - .:/app
+    entrypoint: ["/app/entrypoint.sh"]
+    expose:
+      - "3005"
+    ports:
+      - "3005:3005"
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - rabbit
+
+  rmq-listener:
+    build: .
+    container_name: 'thesis-rmq-listener'
+    volumes:
+      - .:/app
+    command: [ 'python', './app/rmq/listener.py' ]
+    env_file:
+      - .env
+    restart: on-failure
+    depends_on:
+      - db
+      - rabbit
+      - api
+
+volumes:
+  mariadb_data:
